@@ -1,47 +1,50 @@
 import streamlit as st
-import tensorflow as tf
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+import numpy as np
 import joblib
+import tensorflow as tf
 import nltk
+import string
 from nltk.corpus import stopwords
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-# 1. Setup NLTK (Must download on the server)
+# Download stopwords (only runs first time)
 nltk.download('stopwords')
-nltk.download('punkt')
-STOPWORDS = set(stopwords.words('english'))
 
-# 2. Load the Brain (Model) and the Translator (Tokenizer)
-# Ensure these filenames match exactly what you uploaded to GitHub
-@st.cache_resource
-def load_assets():
-    model = tf.keras.models.load_model('spam_detector_model.keras')
-    tokenizer = joblib.load('tokenizer.pkl')
-    return model, tokenizer
+# Load artifacts
+model = tf.keras.models.load_model("spam_detector_model.keras")
+tokenizer = joblib.load("tokenizer.pkl")
 
-model, tokenizer = load_assets()
+# Parameters (must match training)
+max_len = 100  # ⚠️ adjust if your notebook used a different value
 
-# 3. UI Layout
-st.set_page_config(page_title="AI Spam Detector", page_icon="📧")
-st.title("📧 Professional Spam Classifier")
-st.write("Enter an email below to check if it's safe or spam.")
+# Text preprocessing function
+def preprocess_text(text):
+    text = text.lower()
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    stop_words = set(stopwords.words('english'))
+    words = text.split()
+    words = [word for word in words if word not in stop_words]
+    return " ".join(words)
 
-user_input = st.text_area("Email Content:", height=200, placeholder="Paste email here...")
+# Streamlit UI
+st.title("📧 Spam Email Detector")
+st.write("Enter an email message below to check if it's spam or not.")
 
-if st.button("Analyze Email"):
-    if user_input.strip():
-        # Preprocessing (Matching your notebook logic)
-        # 1. Tokenize
-        sequences = tokenizer.texts_to_sequences([user_input])
-        # 2. Pad (using maxlen=50 from your notebook)
-        padded = pad_sequences(sequences, maxlen=50, padding='post', truncating='post')
-        
-        # Prediction
-        prediction = model.predict(padded)
-        probability = float(prediction[0][0])
-        
-        if probability > 0.5:
-            st.error(f"🚨 **SPAM DETECTED** (Confidence: {probability:.2%})")
-        else:
-            st.success(f"✅ **LEGITIMATE EMAIL** (Confidence: {1-probability:.2%})")
+user_input = st.text_area("Email Content")
+
+if st.button("Predict"):
+    if user_input.strip() == "":
+        st.warning("Please enter some text.")
     else:
-        st.warning("Please enter some text to analyze.")
+        processed = preprocess_text(user_input)
+
+        sequence = tokenizer.texts_to_sequences([processed])
+        padded = pad_sequences(sequence, maxlen=max_len)
+
+        prediction = model.predict(padded)[0][0]
+
+        # Because you used sigmoid
+        if prediction > 0.5:
+            st.error(f"🚨 Spam detected (confidence: {prediction:.2f})")
+        else:
+            st.success(f"✅ Not Spam (confidence: {1 - prediction:.2f})")
